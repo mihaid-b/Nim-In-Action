@@ -1,8 +1,11 @@
-import asyncdispatch, asyncnet, base64, json
+import asyncdispatch, asyncnet, base64, json, ws, json
 
-import types
+import types, logging
 
 proc sendClientTask*(client: C2Client, taskName: string, jData: JsonNode = nil): Future[Task] {.async.} =
+  if not client.connected:
+    errorLog "can't send task to disconnected client: " & $client
+    return
   var data: JsonNode
   if jData.isNil:
     data = %*{}
@@ -15,7 +18,8 @@ proc sendClientTask*(client: C2Client, taskName: string, jData: JsonNode = nil):
     action: taskName,
     status: TaskNotCompleted,
     arguments: data,
-    future: new (ref Future[void])
+    future: new (ref Future[void]),
+    output: %*{}
   )
 
   client.server.tasks.add(createdTask)
@@ -26,6 +30,12 @@ proc sendClientTask*(client: C2Client, taskName: string, jData: JsonNode = nil):
       "taskId": createdTask.id,
       "data": data
     }
+
+  for wsConnection in client.server.wsConnections:
+    discard wsConnection.send($(%*{
+      "event": "newtask",
+      "data": %createdTask
+    }))
 
   if client.listenerType == "tcp":
     let tcpSocket: TCPSocket = client.getTcpSocket()

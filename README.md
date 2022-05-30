@@ -1,2 +1,0 @@
-# Nim-Playground
- Nim snippets 
